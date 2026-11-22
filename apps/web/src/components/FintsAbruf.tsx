@@ -209,8 +209,8 @@ export function FintsAbruf({
       setOffen({ fuer, schritt: s });
       return;
     }
-    // Erst neu laden, dann Formular schließen und melden: Verbinden ersetzt die Verbindung samt ID, und „Trennen“ an der
-    // alten Zeile fände sie nicht mehr. Ohne sync endete invalidate schon mit den alten Daten und lüde im Hintergrund nach
+    // Erst neu laden, dann Formular schließen und melden: Nach dem ersten Verbinden steht die Verbindung erst dann auf der
+    // Seite. Ohne sync endete invalidate schon mit den alten Daten und lüde im Hintergrund nach
     await router.invalidate({ sync: true });
     setOffen(null);
     if (fuer === "neu") setVerbinden(false);
@@ -240,7 +240,8 @@ export function FintsAbruf({
     setOffen(null);
   };
 
-  // „Abbrechen“ bei einem Schritt der Bank: Ab dem Abruf der Umsätze hat Verbinden die Verbindung samt ID schon ersetzt.
+  // „Abbrechen“ bei einem Schritt der Bank: Ab dem Abruf der Umsätze hat Verbinden den Zugang schon gespeichert, beim
+  // ersten Verbinden als neue Verbindung.
   // Erst neu laden, dann schließen; solange ein Schritt offen ist, sind die Knöpfe an den Zeilen gesperrt
   const schrittAbbrechen = () => void router.invalidate({ sync: true }).then(schliessen);
 
