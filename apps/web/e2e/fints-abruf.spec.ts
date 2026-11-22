@@ -372,3 +372,131 @@ test("„Über FinTS verbinden“ ist gesperrt, solange an einer Zeile ein Schri
   await freigabe().getByRole("button", { name: "Weiter" }).click();
   await expect(abruf().getByText(/^Testbank verbunden/)).toBeVisible();
 });
+
+test("„Jetzt abrufen“ und „Zugang ändern“ sind gesperrt, solange oben „Über FinTS verbinden“ offen ist", async () => {
+  // Sonst stünde der Schritt an der Zeile neben dem Formular oben, und dessen Schritt ersetzte ihn, ohne dass Haben den
+  // Vorgang bei der Bank verwirft (#1660)
+  const sql = postgres(databaseUrlFuer("fints-abruf"), { max: 1, onnotice: () => {} });
+  const status = async (s: "aktiv" | "fehler") => {
+    await sql`update fints_connections set status = ${s}, last_error = ${s === "fehler" ? "Abruf fehlgeschlagen: PIN ungültig. (9942)" : null}`;
+  };
+  const jetzt = abruf().getByRole("button", { name: "Jetzt abrufen" });
+  const zugang = abruf().getByRole("button", { name: "Zugang ändern" });
+  const trennen = abruf().getByRole("button", { name: "Trennen" });
+  const form = page.getByRole("form", { name: "Über FinTS verbinden" });
+  const sobald = "gehen wieder, sobald das Verbinden über FinTS oben fertig oder abgebrochen ist.";
+  const grund = `„Zugang ändern“ und „Jetzt abrufen“ ${sobald}`;
+  try {
+    await status("fehler");
+    await gehe(page, "/bank");
+    await abruf().getByRole("button", { name: "Über FinTS verbinden" }).click();
+    await expect(form).toBeVisible();
+    await expect(jetzt).toBeDisabled();
+    await expect(zugang).toBeDisabled();
+    await expect(trennen).toBeEnabled();
+    await expect(abruf().getByText(grund)).toBeVisible();
+    await expect(jetzt).toHaveAccessibleDescription(grund);
+    await expect(zugang).toHaveAccessibleDescription(grund);
+    await form.getByRole("button", { name: "Abbrechen" }).click();
+    await expect(jetzt).toBeEnabled();
+    await expect(zugang).toBeEnabled();
+    await expect(abruf().getByText(grund)).toHaveCount(0);
+
+    // Auch das Formular aus „Zugang ändern“ und der Schritt der Bank beim Verbinden; dort ist auch „Trennen“ gesperrt
+    await zugang.click();
+    await expect(form.getByLabel("Bankleitzahl")).toHaveValue("12030000");
+    await expect(jetzt).toBeDisabled();
+    await expect(jetzt).toHaveAccessibleDescription(grund);
+    await form.getByLabel("PIN").fill("12345");
+    await form.getByRole("button", { name: "Verbinden" }).click();
+    await expect(freigabe().getByLabel("TAN-Verfahren")).toBeVisible();
+    const alle = `„Trennen“, „Zugang ändern“ und „Jetzt abrufen“ ${sobald}`;
+    await expect(trennen).toBeDisabled();
+    await expect(trennen).toHaveAccessibleDescription(alle);
+    await expect(jetzt).toHaveAccessibleDescription(alle);
+    await freigabe().getByRole("button", { name: "Abbrechen" }).click();
+    await expect(freigabe()).toHaveCount(0);
+    await expect(jetzt).toBeEnabled();
+    await expect(abruf().getByText(alle)).toHaveCount(0);
+  } finally {
+    await status("aktiv");
+    await sql.end();
+  }
+});
+
+test("„Über FinTS verbinden“ ist gesperrt, solange eine Zeile „Rufe ab …“ zeigt", async () => {
+  // Sonst ersetzte ein Schritt beim Verbinden den, mit dem die Bank auf den Abruf antwortet (#1660)
+  await gehe(page, "/bank");
+  const verbinden = abruf().getByRole("button", { name: "Über FinTS verbinden" });
+  const grund = "„Über FinTS verbinden“ geht wieder, sobald der Abruf für Testbank fertig ist.";
+  let loslassen!: () => void;
+  const gehalten = new Promise<void>((fertig) => {
+    loslassen = fertig;
+  });
+  await page.route(
+    (url) => url.pathname.startsWith("/_serverFn/"),
+    async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await gehalten;
+      await route.continue();
+    },
+  );
+  try {
+    await abruf().getByRole("button", { name: "Jetzt abrufen" }).click();
+    await expect(abruf().getByRole("button", { name: "Rufe ab …" })).toBeDisabled();
+    await expect(verbinden).toBeDisabled();
+    await expect(abruf().getByText(grund)).toBeVisible();
+    await expect(verbinden).toHaveAccessibleDescription(grund);
+  } finally {
+    loslassen();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+  await expect(abruf().getByText(/^Testbank, \d+ neue Umsätze\.$/)).toBeVisible();
+  await expect(verbinden).toBeEnabled();
+  await expect(abruf().getByText(grund)).toHaveCount(0);
+});
+
+test("Zugeklapptes Verbinden, das noch auf die Bank wartet, ersetzt keinen Schritt an der Zeile", async () => {
+  // Wie #1660 in der anderen Reihenfolge: Klappt „Über FinTS verbinden“ oben das Formular bei „Verbinde …“ zu, sind die
+  // Knöpfe an den Zeilen frei; die späte Antwort auf das Verbinden darf den Schritt an der Zeile nicht ersetzen
+  await gehe(page, "/bank");
+  const verbinden = abruf().getByRole("button", { name: "Über FinTS verbinden" });
+  const form = page.getByRole("form", { name: "Über FinTS verbinden" });
+  const tan = freigabe().getByLabel("TAN", { exact: true });
+  let loslassen!: () => void;
+  const gehalten = new Promise<void>((fertig) => {
+    loslassen = fertig;
+  });
+  let anfrage: import("@playwright/test").Request | undefined;
+  await page.route(
+    (url) => url.pathname.startsWith("/_serverFn/"),
+    async (route) => {
+      if (route.request().method() !== "POST" || anfrage) return route.fallback();
+      anfrage = route.request();
+      await gehalten;
+      await route.continue();
+    },
+  );
+  bank.zustand.scaBeiAnmeldung = true;
+  let verworfen!: Promise<unknown>;
+  try {
+    await verbinden.click();
+    await zugangEingeben();
+    await expect(form.getByRole("button", { name: "Verbinde …" })).toBeVisible();
+    await verbinden.click();
+    await expect(form).toHaveCount(0);
+    bank.zustand.scaBeiUmsaetzen = true;
+    await abruf().getByRole("button", { name: "Jetzt abrufen" }).click();
+    await expect(tan).toBeVisible();
+    verworfen = page.waitForResponse((r) => r.request() !== anfrage && r.request().method() === "POST" && new URL(r.url()).pathname.startsWith("/_serverFn/"));
+  } finally {
+    loslassen();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+  // Die späte Antwort verwirft den offenen Schritt bei der Bank (cancelFints) statt ihn an der Zeile einzusetzen
+  await verworfen;
+  await expect(tan).toBeVisible();
+  await freigabe().getByRole("button", { name: "Abbrechen" }).click();
+  // Das verworfene Verbinden hat die Anmeldung mit TAN nie abgeschlossen, die Testbank setzt scaBeiAnmeldung also nicht selbst zurück
+  Object.assign(bank.zustand, { scaBeiAnmeldung: false, scaBeiUmsaetzen: false });
+});

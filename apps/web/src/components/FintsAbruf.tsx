@@ -1,15 +1,16 @@
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { defaultFetchFrom, fetchFromForConnect } from "../lib/bank-connect.ts";
 import { errorMessage, formatDate, formatDateTime } from "../lib/format.ts";
 import { useSubmitCheck } from "../lib/use-submit-check.ts";
 import type { getBankOverview } from "../server/functions/bank.ts";
-import { cancelFints, connectFints, continueFints, disconnectFints, syncFints } from "../server/functions/fints.ts";
+import { cancelFints, connectFints, disconnectFints, syncFints } from "../server/functions/fints.ts";
 import { today as todayInGermany } from "../server/today.ts";
 import { FintsStatus } from "./BankStatus.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Field } from "./Field.tsx";
+import { type Offen, type Schritt, SchrittForm, useAntwort } from "./FintsSchritt.tsx";
 
 /*
  * Kontoabruf über FinTS (#654) auf der Bankseite: Verbinden mit Bankleitzahl, FinTS-Adresse, Anmeldename und PIN,
@@ -19,125 +20,47 @@ import { Field } from "./Field.tsx";
 
 type Fints = Awaited<ReturnType<typeof getBankOverview>>["fints"];
 type Verbindung = Fints["connections"][number];
-type Schritt = Awaited<ReturnType<typeof continueFints>>;
-type Offen = Exclude<Schritt, { art: "fertig" }>;
 type Meldung = { tone: "ok" | "danger" | "info"; text: string };
 /** Offener Schritt der Bank beim Verbinden („neu“) oder an der Zeile einer Verbindung (ihre ID); die Bankseite führt ihn */
 export type FintsOffen = { fuer: string; schritt: Offen } | null;
+
+/**
+ * Was die Bankseite für FinTS führt, damit der Kopf des Bereichs es kennt: Formular „Über FinTS verbinden“ offen
+ * (verbinden), offener Schritt der Bank und die Zeile mit laufender Anfrage (busy: ihre ID beim Abruf, `x-<ID>` beim Trennen)
+ */
+export function useFintsZustand() {
+  const [verbinden, setVerbinden] = useState(false);
+  const [offen, setOffen] = useState<FintsOffen>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  return { verbinden, setVerbinden, offen, setOffen, busy, setBusy };
+}
+export type FintsZustand = ReturnType<typeof useFintsZustand>;
 
 export const FINTS_ANLEITUNG = "https://github.com/Speicherstadt/haben/blob/main/docs/installation-anbindungen.md#kontoabruf-über-fints";
 
 /** Name mit den letzten vier Ziffern der IBAN; neue Konten tragen sie schon im Namen („Testbank Girokonto …2051“) */
 const kontoName = (a: { name: string; iban: string }) => (a.name.endsWith(a.iban.slice(-4)) ? a.name : `${a.name} …${a.iban.slice(-4)}`);
 
+/**
+ * Grund an einer Zeile, solange oben „Über FinTS verbinden“ offen ist: Ein Schritt der Bank an der Zeile stünde sonst neben
+ * dem Formular, und dessen Schritt ersetzte ihn, ohne dass Haben den Vorgang bei der Bank verwirft (#1660). Nennt jeden
+ * Knopf, der deshalb gesperrt ist; „Trennen“ nur, solange die Bank beim Verbinden auf einen Schritt wartet
+ */
+function sperrGrund(c: Verbindung, schritt: boolean): string {
+  const knoepfe = [...(schritt ? ["Trennen"] : []), ...(c.status === "fehler" ? ["Zugang ändern"] : []), "Jetzt abrufen"];
+  const liste = new Intl.ListFormat("de").format(knoepfe.map((k) => `„${k}“`));
+  return `${liste} ${knoepfe.length > 1 ? "gehen" : "geht"} wieder, sobald das Verbinden über FinTS oben fertig oder abgebrochen ist.`;
+}
+
 const meldungenAus = (s: Extract<Schritt, { art: "fertig" }>): Meldung[] => [
   { tone: s.ok ? "ok" : "danger", text: s.meldung },
   ...s.hinweise.map((text) => ({ tone: "info" as const, text })),
 ];
 
-/** Was die Bank gerade will: ein TAN-Verfahren oder -Medium wählen, eine TAN eingeben oder in der App freigeben */
-function SchrittForm({ schritt, onSchritt, onAbbrechen }: { schritt: Offen; onSchritt: (s: Schritt) => Promise<void>; onAbbrechen: () => void }) {
-  const weiter = useServerFn(continueFints);
-  const verwerfen = useServerFn(cancelFints);
-  const medien = schritt.art === "verfahren" && schritt.verfahren.length === 1 ? schritt.verfahren[0]!.medien : [];
-  const [wahl, setWahl] = useState(schritt.art === "verfahren" ? (medien[0] ?? String(schritt.verfahren[0]?.id ?? "")) : "");
-  const [tan, setTan] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const {
-    form,
-    error: fehler,
-    check,
-  } = useSubmitCheck({
-    tan: schritt.art === "tan" && !schritt.entkoppelt && !tan.trim() ? "Bitte die TAN eingeben." : null,
-  });
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy || !check()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const data =
-        schritt.art === "tan"
-          ? { vorgang: schritt.vorgang, tan: schritt.entkoppelt ? undefined : tan }
-          : medien.length > 0
-            ? { vorgang: schritt.vorgang, verfahren: schritt.verfahren[0]!.id, medium: wahl }
-            : { vorgang: schritt.vorgang, verfahren: Number(wahl) };
-      await onSchritt(await weiter({ data }));
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function abbrechen() {
-    void verwerfen({ data: schritt.vorgang }).catch(() => undefined);
-    onAbbrechen();
-  }
-
-  return (
-    <form ref={form} onSubmit={onSubmit} className="stack" style={{ gap: 12, maxWidth: 560 }} aria-label="Freigabe bei der Bank" noValidate>
-      {schritt.art === "verfahren" ? (
-        <Field
-          label={medien.length > 0 ? "TAN-Medium" : "TAN-Verfahren"}
-          hint="Wie du Aufträge bei deiner Bank freigibst; die Bank nennt nur, was für deinen Zugang geht."
-        >
-          {(control) => (
-            <select {...control} value={wahl} onChange={(e) => setWahl(e.target.value)}>
-              {medien.length > 0
-                ? medien.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))
-                : schritt.verfahren.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                    </option>
-                  ))}
-            </select>
-          )}
-        </Field>
-      ) : (
-        <>
-          <p style={{ margin: 0, whiteSpace: "pre-line" }}>{schritt.text}</p>
-          {schritt.bild && <img src={schritt.bild} alt="Grafik der Bank für die photoTAN" style={{ maxWidth: 240 }} />}
-          {schritt.hinweis && (
-            <div className="banner banner-info" role="status">
-              {schritt.hinweis}
-            </div>
-          )}
-          {!schritt.entkoppelt && (
-            <Field label="TAN" error={fehler("tan")}>
-              {(control) => (
-                <input {...control} value={tan} onChange={(e) => setTan(e.target.value)} inputMode="numeric" autoComplete="one-time-code" required autoFocus />
-              )}
-            </Field>
-          )}
-        </>
-      )}
-      {error && (
-        <div className="banner banner-danger" role="alert">
-          {error}
-        </div>
-      )}
-      <div className="actions">
-        <button type="button" className="btn" onClick={abbrechen} disabled={busy}>
-          Abbrechen
-        </button>
-        <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? "Warte auf die Bank …" : schritt.art === "verfahren" ? "Weiter" : schritt.entkoppelt ? "Freigegeben, weiter" : "TAN senden"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
 /** Zugang zum Online-Banking; mit vorlage für „Zugang ändern“ schon ausgefüllt, nur die PIN fehlt */
 function VerbindenForm({ vorlage, onSchritt, onAbbrechen }: { vorlage: Verbindung | null; onSchritt: (s: Schritt) => Promise<void>; onAbbrechen: () => void }) {
   const connect = useServerFn(connectFints);
+  const antwort = useAntwort(onSchritt);
   const today = todayInGermany();
   const [blz, setBlz] = useState(vorlage?.bankCode ?? "");
   const [url, setUrl] = useState(vorlage?.url ?? "");
@@ -173,7 +96,7 @@ function VerbindenForm({ vorlage, onSchritt, onAbbrechen }: { vorlage: Verbindun
         pin,
         fetchFrom: fetchFromForConnect(fetchFrom, today),
       };
-      await onSchritt(await connect({ data }));
+      await antwort(await connect({ data }));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -233,6 +156,22 @@ function VerbindenForm({ vorlage, onSchritt, onAbbrechen }: { vorlage: Verbindun
   );
 }
 
+/** Rückfrage vor „Trennen“ an der Zeile einer Verbindung */
+function TrennenDialog({ verbindung, onTrennen, onClose }: { verbindung: Verbindung | null; onTrennen: (id: string) => void; onClose: () => void }) {
+  return (
+    <ConfirmDialog
+      open={verbindung !== null}
+      title={`FinTS-Verbindung zu ${verbindung?.bankName} trennen?`}
+      confirmLabel="Trennen"
+      danger
+      onConfirm={() => verbindung && onTrennen(verbindung.id)}
+      onClose={onClose}
+    >
+      <p>Haben löscht die gespeicherte PIN. Die abgerufenen Umsätze bleiben erhalten.</p>
+    </ConfirmDialog>
+  );
+}
+
 /** FinTS im Bereich „Automatischer Abruf“: Formular zum Verbinden (verbinden), die Verbindungen und der offene Schritt der Bank */
 export function FintsAbruf({
   fints,
@@ -240,19 +179,28 @@ export function FintsAbruf({
   setVerbinden,
   offen,
   setOffen,
+  busy,
+  setBusy,
 }: {
   fints: Fints;
   verbinden: boolean;
   setVerbinden: (v: boolean) => void;
   offen: FintsOffen;
   setOffen: (o: FintsOffen) => void;
+  busy: string | null;
+  setBusy: (b: string | null) => void;
 }) {
   const router = useRouter();
   const sync = useServerFn(syncFints);
   const disconnect = useServerFn(disconnectFints);
   const verwerfen = useServerFn(cancelFints);
   const [vorlage, setVorlage] = useState<Verbindung | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const grundId = useId();
+  // ID des Grundes an der Zeile, solange oben „Über FinTS verbinden“ offen ist (an)
+  const grund = (c: Verbindung, an = verbinden) => (an ? `${grundId}-${c.id}` : undefined);
+  const gesperrt = busy !== null || offen !== null;
+  // Wartet die Bank beim Verbinden auf einen Schritt, ist auch „Trennen“ gesperrt, und der Grund nennt es mit
+  const schrittNeu = verbinden && offen?.fuer === "neu";
   const [meldungen, setMeldungen] = useState<Meldung[]>([]);
   const [trennt, setTrennt] = useState<Verbindung | null>(null);
 
@@ -280,6 +228,12 @@ export function FintsAbruf({
       setBusy(null);
     }
   }
+
+  const trennen = (id: string) =>
+    void run(`x-${id}`, async () => {
+      await disconnect({ data: id });
+      await router.invalidate();
+    });
 
   const schliessen = () => {
     setVerbinden(false);
@@ -313,23 +267,7 @@ export function FintsAbruf({
           <VerbindenForm key={vorlage ? `zugang-${vorlage.id}` : "neu"} vorlage={vorlage} onSchritt={(s) => ergebnis("neu", s)} onAbbrechen={schliessen} />
         ))}
 
-      <ConfirmDialog
-        open={trennt !== null}
-        title={`FinTS-Verbindung zu ${trennt?.bankName} trennen?`}
-        confirmLabel="Trennen"
-        danger
-        onConfirm={() => {
-          if (!trennt) return;
-          const { id } = trennt;
-          void run(`x-${id}`, async () => {
-            await disconnect({ data: id });
-            await router.invalidate();
-          });
-        }}
-        onClose={() => setTrennt(null)}
-      >
-        <p>Haben löscht die gespeicherte PIN. Die abgerufenen Umsätze bleiben erhalten.</p>
-      </ConfirmDialog>
+      <TrennenDialog verbindung={trennt} onTrennen={trennen} onClose={() => setTrennt(null)} />
 
       {fints.connections.map((c) => (
         <div key={c.id} className="history-row" style={{ alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
@@ -342,16 +280,22 @@ export function FintsAbruf({
             <span className="small muted">{c.accounts.map(kontoName).join(" · ") || "Keine Konten"}</span>
             <span className="small muted">{c.lastSyncAt ? `Zuletzt abgerufen ${formatDateTime(c.lastSyncAt)}` : "Noch nicht abgerufen"}</span>
             {c.lastError && <span className="field-error">{c.lastError}</span>}
+            {verbinden && (
+              <span id={grund(c)} className="small muted">
+                {sperrGrund(c, schrittNeu)}
+              </span>
+            )}
           </div>
           <div className="actions">
-            <button type="button" className="btn btn-danger" disabled={busy !== null || offen !== null} onClick={() => setTrennt(c)}>
+            <button type="button" className="btn btn-danger" disabled={gesperrt} aria-describedby={grund(c, schrittNeu)} onClick={() => setTrennt(c)}>
               Trennen
             </button>
             {c.status === "fehler" && fints.configured && (
               <button
                 type="button"
                 className="btn"
-                disabled={busy !== null || offen !== null}
+                disabled={gesperrt || verbinden}
+                aria-describedby={grund(c)}
                 onClick={() => {
                   setVorlage(c);
                   setVerbinden(true);
@@ -364,7 +308,8 @@ export function FintsAbruf({
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={busy !== null || offen !== null}
+                disabled={gesperrt || verbinden}
+                aria-describedby={grund(c)}
                 onClick={() => void run(c.id, async () => ergebnis(c.id, await sync({ data: c.id })))}
               >
                 {busy === c.id ? "Rufe ab …" : "Jetzt abrufen"}
