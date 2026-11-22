@@ -68,6 +68,7 @@ import {
   type KirchensteuerSatz,
   type Millis,
   type Prozent,
+  RECURRENCE_KEYS,
 } from "@haben/core";
 import type { LstbWerte } from "@haben/core";
 
@@ -4050,9 +4051,9 @@ export const recurringInvoices = pgTable(
         }[]
       >()
       .notNull(),
-    /** Monate zwischen zwei Rechnungen: 1, 3, 6 oder 12 */
-    intervalMonths: smallint("interval_months").notNull(),
-    /** Tag im Monat, auf den die Termine fallen (31 = Monatsende) */
+    /** Abstand zweier Rechnungen als Dauer nach ISO 8601: P1W, P2W, P4W, P1M, P2M, P3M, P6M oder P1Y (#1691) */
+    recurrence: text("recurrence", { enum: RECURRENCE_KEYS }).notNull(),
+    /** Tag im Monat, auf den die Termine fallen (31 = Monatsende); bei Wochen ohne Wirkung */
     anchorDay: smallint("anchor_day").notNull(),
     nextDate: date("next_date", { mode: "string" }).notNull(),
     endDate: date("end_date", { mode: "string" }),
@@ -4073,7 +4074,7 @@ export const recurringInvoices = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("recurring_interval", sql`${t.intervalMonths} in (1, 3, 6, 12)`),
+    check("recurring_recurrence", sql`${t.recurrence} in ('P1W', 'P2W', 'P4W', 'P1M', 'P2M', 'P3M', 'P6M', 'P1Y')`),
     check("recurring_anchor_day", sql`${t.anchorDay} between 1 and 31`),
     index("recurring_invoices_name_trgm_idx").using("gin", sql`haben_unaccent(${t.name}) gin_trgm_ops`),
   ],
