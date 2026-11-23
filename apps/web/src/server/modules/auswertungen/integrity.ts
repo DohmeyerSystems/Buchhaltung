@@ -5,7 +5,7 @@ import { lastFileCheck, type FileCheck } from "./file-integrity.ts";
 import { db, schema } from "../../db/index.ts";
 import { loadCompany } from "../stammdaten/index.ts";
 import { today } from "../../today.ts";
-import { checkTriggerIntegrity } from "../../db/trigger-inventory.ts";
+import { checkTriggerIntegrity, checkTriggerInventory, type InventoryChecksum } from "../../db/trigger-inventory.ts";
 
 import { PRUEFUNG_ABGEBROCHEN } from "../../../lib/pruefbericht.ts";
 
@@ -52,6 +52,8 @@ export interface IntegrityReport {
   accountCollisions: { kontenrahmen: Kontenrahmen; account: string; name: string }[];
   /** Zusätzliche Betreibertrigger sind Hinweise, keine Korruptionsbefunde. */
   triggerHints: string[];
+  /** Prüfsumme der Sperren: eigener Bestand und ausgelieferter Sollbestand (#1683) */
+  inventoryChecksum: InventoryChecksum;
   /** Letzte Vollprüfung der Dateien im Dokumentenspeicher (file-integrity.ts); null, solange keine lief */
   files: FileCheck | null;
 }
@@ -110,7 +112,7 @@ function readSnapshot(now: string) {
     async (tx) => {
       // Vor haben_integrity_problems: Den Suchpfad liest die Prüfung so, wie die Prüffunktionen ihn vorfinden. Eine fremde
       // Funktion, die sie aufrufen, könnte ihn bis zum Ende der Transaktion ändern.
-      const triggers = await checkTriggerIntegrity(tx);
+      const triggers = await checkTriggerInventory(tx);
       const rows = await integrityRows(tx);
       const head = await chainHead(tx);
       const [entries] = await tx.select({ n: count() }).from(schema.auditLog);
@@ -123,7 +125,16 @@ function readSnapshot(now: string) {
         .from(schema.ownAccounts)
         .orderBy(schema.ownAccounts.kontenrahmen, schema.ownAccounts.account);
       const accountCollisions = ownAccounts.filter((account) => reservedAccountNumbers(account.kontenrahmen).has(account.account));
-      return { rows: [...rows, ...triggers.problems], triggerHints: triggers.hints, head, entries: entries!.n, seals: seals!.n, abgleich, accountCollisions };
+      return {
+        rows: [...rows, ...triggers.problems],
+        triggerHints: triggers.hints,
+        inventoryChecksum: triggers.checksum,
+        head,
+        entries: entries!.n,
+        seals: seals!.n,
+        abgleich,
+        accountCollisions,
+      };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
@@ -138,7 +149,7 @@ export async function checkIntegrity(now = today(), zusatz: () => Promise<Abglei
   // und geht in der Transaktion mit festem Stand nicht. Ohne Buchungen bleibt die Prüfung ohne jeden Schreibzugriff.
   const [booking] = await db.select({ id: schema.journalEntries.id }).from(schema.journalEntries).limit(1);
   if (booking) await loadCompany();
-  const { rows, triggerHints, head, entries, seals, abgleich, accountCollisions } = await readSnapshot(now);
+  const { rows, triggerHints, inventoryChecksum, head, entries, seals, abgleich, accountCollisions } = await readSnapshot(now);
   const weitere = await ohneUebernommeneZeilen(await zusatz());
   const files = await lastFileCheck();
   const problems = [...rows].map((r) => ({ ...r, seq: r.seq === null ? null : Number(r.seq) }));
@@ -153,6 +164,7 @@ export async function checkIntegrity(now = today(), zusatz: () => Promise<Abglei
     abgleich: { abweichungen: abweichungen([...abgleich.zeilen, ...weitere.zeilen]), hinweise: abgleich.hinweise },
     accountCollisions,
     triggerHints,
+    inventoryChecksum,
     files,
   };
 }
