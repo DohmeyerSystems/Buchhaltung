@@ -328,7 +328,7 @@ Auf der Seite **Buchungen** steht der Knopf **Buchung erfassen**. Damit buchst d
 
 Im Einzelunternehmen braucht der Bank-Anfangsbestand keine Buchung für die EÜR ([§ 4 Abs. 3 EStG](https://www.gesetze-im-internet.de/estg/__4.html), [§ 11 EStG](https://www.gesetze-im-internet.de/estg/__11.html)). Wenn der letzte Import oder Abruf einen Endsaldo liefert, zeigt Haben ihn unter [Bank](bank.md) am Kontoreiter.
 
-Eine Zeile hat ein Konto mit vier Ziffern und einen Betrag im Soll oder im Haben, bis zu 20 Zeilen je Buchung; Soll und Haben müssen gleich sein. Die Kontobezeichnung erscheint, wenn Haben das Konto kennt.
+Eine Zeile hat ein Konto mit vier Ziffern und einen Betrag im Soll oder im Haben, bis zu 20 Zeilen je Buchung; Soll und Haben müssen gleich sein. Ins Kontofeld tippst du die Nummer oder einen Teil der Bezeichnung, etwa „kapital“; die Liste zeigt die passenden Konten mit Nummer, Pfeiltasten und Enter oder ein Klick übernehmen die Nummer. Die Kontobezeichnung erscheint, wenn Haben das Konto kennt.
 
 Im Einzelunternehmen steht neben einem Erfolgskonto nur ein Privatkonto, etwa eine Ausgabe ohne Beleg, privat bezahlt (Aufwand an Privateinlagen). Jedes Erfolgskonto braucht eine Zeile der Anlage EÜR; Zahlungen gehen über Bank oder Kasse.
 
