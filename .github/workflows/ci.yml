@@ -87,7 +87,7 @@ jobs:
         teil: [1, 2, 3, 4]
     services:
       postgres:
-        image: postgres:18
+        image: postgres:19
         env:
           POSTGRES_USER: haben
           POSTGRES_PASSWORD: haben
@@ -138,7 +138,7 @@ jobs:
         teil: [1, 2, 3, 4, 5, sso]
     services:
       postgres:
-        image: postgres:18
+        image: postgres:19
         env:
           POSTGRES_USER: haben
           POSTGRES_PASSWORD: haben
@@ -574,12 +574,12 @@ jobs:
           # Kein sauberes Herunterfahren, wie nach einem Absturz
           docker compose kill db
           docker compose up -d db backup
-          docker compose logs db | grep -q "Upgrade auf PostgreSQL 18 fertig"
-          test "$(docker compose exec -T db psql -U haben -d haben -Atc "SELECT current_setting('server_version_num')::int / 10000")" = 18
+          docker compose logs db | grep -q "Upgrade auf PostgreSQL 19 fertig"
+          test "$(docker compose exec -T db psql -U haben -d haben -Atc "SELECT current_setting('server_version_num')::int / 10000")" = 19
           test "$(docker compose exec -T db psql -U haben -d haben -Atc 'SELECT x FROM t')" = vorher
           # Rollen und Rechte stammen aus dem Cluster-Upgrade, nicht aus einer erneuten Rollenanlage.
           docker compose exec -T db psql -U haben_app -d haben -X -q < tests/rollen-db.sql
-          # Der alte Bestand liegt unverändert daneben, der neue in 18/docker
+          # Der alte Bestand liegt unverändert daneben, der neue in 19/docker
           docker compose exec -T db test -s /var/lib/postgresql/data/16/docker/PG_VERSION
           docker compose exec -T db test ! -e /var/lib/postgresql/data/PG_VERSION
           # Ein Neustart aktualisiert nicht noch einmal
