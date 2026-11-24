@@ -18,6 +18,7 @@ import {
   readWebExport,
   type LexofficeClientOptions,
   type LexofficeSource,
+  type WebOmittedCounts,
   webExportSource,
 } from "@haben/import";
 import {
@@ -150,11 +151,16 @@ export async function startImport(actor: string, options: { wait?: boolean } = {
  * übersprungen, Teile dürfen nacheinander kommen.
  */
 export async function startWebImport(actor: string, parts: { name: string; bytes: Uint8Array }[], options: { wait?: boolean } = {}): Promise<string> {
-  const source = webExportSource(readWebExport(parts));
-  return launchImport(actor, () => source, options);
+  const backup = readWebExport(parts);
+  const source = webExportSource(backup);
+  return launchImport(actor, () => source, { ...options, webOmitted: backup.omitted });
 }
 
-async function launchImport(actor: string, sourceFor: (signal: AbortSignal) => LexofficeSource, options: { wait?: boolean }): Promise<string> {
+async function launchImport(
+  actor: string,
+  sourceFor: (signal: AbortSignal) => LexofficeSource,
+  options: { wait?: boolean; webOmitted?: WebOmittedCounts },
+): Promise<string> {
   const current = await latestImport();
   if (current?.status === "laeuft") throw new LexofficeError("Ein Abruf läuft bereits.");
   // Der eindeutige Index gilt für beide Quellen: auch einen verwaisten sevDesk-Lauf als abgebrochen markieren
@@ -169,6 +175,7 @@ async function launchImport(actor: string, sourceFor: (signal: AbortSignal) => L
     skipped: 0,
     files: 0,
     failed: [],
+    ...(options.webOmitted ? { webOmitted: options.webOmitted } : {}),
   };
   const [row] = await withActor(actor, (tx) => tx.insert(schema.lexofficeImports).values({ progress }).returning({ id: schema.lexofficeImports.id })).catch(
     (error: unknown) => {
@@ -211,7 +218,7 @@ export async function finish(id: string, progress: LexofficeImportProgress, stat
 /**
  * Belegliste des Laufs. Entwürfe sind keine Belege; der Abruf übergeht sie und zählt ihre Zahl, damit sie nicht still
  * verschwindet (#1504). Vorgänge ohne Belegart kommen über die API gar nicht erst in die Liste — die Sicherung aus der
- * Web-Oberfläche lässt sie schon beim Packen draußen (#183), deshalb gibt es dafür keinen Zähler.
+ * Web-Oberfläche lässt sie schon beim Packen draußen (#183) und zählt sie dort; ihre Zahlen stehen in `webOmitted` (#1640).
  */
 async function sammleBelegliste(
   client: LexofficeSource,
