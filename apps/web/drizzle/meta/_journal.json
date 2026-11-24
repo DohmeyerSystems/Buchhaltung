@@ -2283,6 +2283,13 @@
       "when": 1795546927144,
       "tag": "0325_postfach_erledigt_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 326,
+      "version": "7",
+      "when": 1795547499310,
+      "tag": "0326_bank_wiederzuordnung",
+      "breakpoints": true
     }
   ]
 }
