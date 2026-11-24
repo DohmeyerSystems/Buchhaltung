@@ -2,7 +2,7 @@
 title: "Überwachung"
 description: >-
   Metriken für Prometheus, VictoriaMetrics und andere Systeme: Health, Hintergrundjobs wie Kontoabruf und Belegpostfach,
-  ELSTER, Scrape-Konfiguration, Alarmregeln.
+  ELSTER, Scrape-Konfiguration, Alarmregeln, Grafana-Dashboard.
 ---
 
 # Überwachung
@@ -36,14 +36,14 @@ scrape_configs:
       - targets: ["haben.example.de"]
 ```
 
-Alarmregeln für Jobs, die seit 24 Stunden nicht durchlaufen (etwa weil sie bei jedem Lauf werfen), und für jeden gescheiterten Lauf der letzten 24 Stunden:
+Alarmregeln stehen in [`deploy/helm/files/prometheus-regeln.yml`](https://github.com/Speicherstadt/haben/blob/main/deploy/helm/files/prometheus-regeln.yml), zum Laden mit `rule_files` in `prometheus.yml`:
 
-```yaml
-groups:
-  - name: haben
-    rules:
-      - alert: HabenJobOhneErfolg
-        expr: time() - haben_job_last_success_timestamp_seconds > 86400
-      - alert: HabenJobGescheitert
-        expr: increase(haben_job_failures_total[1d]) > 0
-```
+- `HabenNichtBereit`: `haben_up` seit 5 Minuten `0`.
+- `HabenJobOhneErfolg`: ein Job seit über 24 Stunden ohne Erfolg, etwa weil er bei jedem Lauf wirft, auch wenn er seit einem Neustart nie gelang.
+- `HabenJobGescheitert`: ein gescheiterter Lauf in den letzten 24 Stunden, auch von Jobs, die danach bis zu ihrem nächsten Termin als erfolgreich gelten. Eine abgelaufene Bankverbindung meldet nur diese Regel, und nur einen Tag lang.
+
+Ob Prometheus Haben überhaupt erreicht, meldet sein eigenes `up` (in kube-prometheus-stack der Alarm `TargetDown`); dafür gibt es keine eigene Regel. Die Regeln brauchen einen Scrape-Abstand von höchstens 2 Minuten, weil Prometheus einen Wert nur 5 Minuten lang sieht.
+
+In Kubernetes legt das Helm-Chart daraus eine `PrometheusRule` an, siehe [Kubernetes › Metriken](kubernetes.md#metriken).
+
+Ein Grafana-Dashboard liegt in [`deploy/grafana/haben.json`](https://github.com/Speicherstadt/haben/blob/main/deploy/grafana/haben.json): unter **Dashboards › New › Import** hochladen, Datenquelle und Instanz wählt man oben im Dashboard. Es zeigt, ob Haben bereit ist, die Version, je Job die Zeit seit dem letzten Erfolg und die Fehler der letzten 24 Stunden sowie die Antworten von ERiC.
