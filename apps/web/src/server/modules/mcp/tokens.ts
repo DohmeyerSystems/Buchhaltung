@@ -20,8 +20,9 @@ import { loadCompany } from "../stammdaten/index.ts";
 export class McpError extends UserError {}
 
 /**
- * Rechte eines Tokens. haben:lesen gilt für die Werkzeuge über MCP, die übrigen für die REST-API. Kein Recht bucht,
- * schreibt fest oder versendet; das bleibt wegen GoBD ein Klick in Haben.
+ * Rechte eines Tokens. haben:lesen gilt für die Werkzeuge über MCP, die übrigen für die REST-API. Kein Recht bucht von
+ * Hand oder versendet. Nur rechnungen:festschreiben (Fork DohmeyerSystems) schreibt Rechnungen fest, mit derselben
+ * Funktion und denselben Prüfungen wie der Knopf in Haben.
  */
 export const TOKEN_SCOPES = [
   "haben:lesen",
@@ -30,6 +31,7 @@ export const TOKEN_SCOPES = [
   "rechnungen:lesen",
   "rechnungen:entwuerfe",
   "rechnungen:vorlagen-anlegen",
+  "rechnungen:festschreiben",
   "angebote:lesen",
   "angebote:entwuerfe",
   "belege:lesen",
@@ -50,6 +52,7 @@ export const TOKEN_SCOPE_LABELS: Record<TokenScope, string> = {
   "rechnungen:lesen": "API: Rechnungen und Entwürfe lesen",
   "rechnungen:entwuerfe": "API: Rechnungen lesen, Entwürfe anlegen, ändern und löschen",
   "rechnungen:vorlagen-anlegen": "API: Vorlagen für wiederkehrende Rechnungen anlegen",
+  "rechnungen:festschreiben": "API: Rechnungen lesen, Entwürfe anlegen, ändern, löschen und festschreiben (Nummer, PDF, Buchung)",
   "angebote:lesen": "API: Angebote und Entwürfe lesen",
   "angebote:entwuerfe": "API: Angebote lesen, Entwürfe anlegen, ändern und löschen",
   "belege:lesen": "API: Belege lesen",
@@ -61,18 +64,19 @@ export const TOKEN_SCOPE_LABELS: Record<TokenScope, string> = {
   "bank:importieren": "API: Bankumsätze in freigegebene Quellen liefern; liest keine Umsätze und bucht nichts",
 };
 
-/** Ein Recht schließt ein anderes mit ein: wer schreiben darf, darf auch lesen */
-const IMPLIED: Partial<Record<TokenScope, TokenScope>> = {
-  "kontakte:schreiben": "kontakte:lesen",
-  "rechnungen:entwuerfe": "rechnungen:lesen",
-  "angebote:entwuerfe": "angebote:lesen",
-  "belege:anlegen": "belege:lesen",
-  "artikel:schreiben": "artikel:lesen",
-  "leistungen:schreiben": "leistungen:lesen",
+/** Ein Recht schließt andere mit ein: wer schreiben darf, darf auch lesen */
+const IMPLIED: Partial<Record<TokenScope, readonly TokenScope[]>> = {
+  "kontakte:schreiben": ["kontakte:lesen"],
+  "rechnungen:entwuerfe": ["rechnungen:lesen"],
+  "rechnungen:festschreiben": ["rechnungen:entwuerfe", "rechnungen:lesen"],
+  "angebote:entwuerfe": ["angebote:lesen"],
+  "belege:anlegen": ["belege:lesen"],
+  "artikel:schreiben": ["artikel:lesen"],
+  "leistungen:schreiben": ["leistungen:lesen"],
 };
 
 export function hasScope(granted: readonly TokenScope[], needed: TokenScope): boolean {
-  return granted.some((scope) => scope === needed || IMPLIED[scope] === needed);
+  return granted.some((scope) => scope === needed || (IMPLIED[scope]?.includes(needed) ?? false));
 }
 
 const TOKEN_PREFIX = "hb_";

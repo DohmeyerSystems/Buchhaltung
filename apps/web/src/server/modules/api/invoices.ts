@@ -18,14 +18,15 @@ import { fail, noContent, notFound, ok, validate, type ApiRequest, type ApiResul
 import { draftCreateSchema, draftPatchSchema, invoiceQuerySchema, type invoiceSchema, type invoiceSummarySchema } from "./schemas.ts";
 
 /*
- * Rechnungen über die REST-API: alle lesen, Entwürfe anlegen, ändern und löschen. Festschreiben, Buchen, Stornieren
- * und Versenden gibt es hier nicht; das bleibt wegen GoBD ein Klick in Haben, auf den `url` in jeder Antwort zeigt.
+ * Rechnungen über die REST-API: alle lesen, Entwürfe anlegen, ändern und löschen. Festschreiben und Abruf von PDF und
+ * XML stehen in invoice-finalize.ts; Buchen von Hand, Stornieren und Versenden bleiben ein Klick in Haben, auf den
+ * `url` in jeder Antwort zeigt.
  */
 
 type Summary = z.output<typeof invoiceSummarySchema>;
 type ListRow = Awaited<ReturnType<typeof listInvoices>>[number];
 
-const INVOICE_NOT_FOUND = "Rechnung nicht gefunden.";
+export const INVOICE_NOT_FOUND = "Rechnung nicht gefunden.";
 const LOCKED = "Die Rechnung ist festgeschrieben und kann über die API nicht geändert oder gelöscht werden. Korrekturen gehen in Haben per Storno.";
 
 function summaryOut(row: ListRow, baseUrl: string): Summary {
@@ -100,7 +101,7 @@ async function loadInvoice(id: string, today: string) {
   return detail && row ? { ...detail, row } : null;
 }
 
-async function respondWith(id: string, request: ApiRequest, status = 200, headers: Record<string, string> = {}): Promise<ApiResult> {
+export async function respondWith(id: string, request: ApiRequest, status = 200, headers: Record<string, string> = {}): Promise<ApiResult> {
   const loaded = await loadInvoice(id, request.today);
   if (!loaded) return notFound(INVOICE_NOT_FOUND);
   return ok(invoiceOut(loaded.row, loaded.invoice, loaded.lines, request.baseUrl), status, headers);

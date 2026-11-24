@@ -33,11 +33,22 @@ export const ERROR_CODES = [
   "payload_too_large",
   "validation_failed",
   "conflict",
+  "umsatzgrenze",
   "unprocessable",
   "rate_limited",
   "internal_error",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
+
+/** Werte der Rückfrage zur Kleinunternehmergrenze (§ 19 UStG), wie sie Haben meldet und die Bestätigung sie zurückgibt */
+const umsatzgrenzeSchema = z
+  .object({
+    umsatz: inCents(z.number().int()).describe("Vereinnahmter Umsatz im Jahr bisher; Cent"),
+    rechnung: inCents(z.number().int()).describe("Netto dieser Rechnung; Cent"),
+    grenze: inCents(z.number().int()).describe("Jahresgrenze; Cent"),
+    vorjahresumsatz: inCents(z.number().int()).optional().describe("Nur wenn schon der Vorjahresumsatz über der Grenze lag; Cent"),
+  })
+  .strict();
 
 export const errorSchema = z
   .object({
@@ -49,6 +60,9 @@ export const errorSchema = z
         .optional()
         .describe("Nur bei validation_failed: was an welchem Feld nicht stimmt"),
       existingId: z.uuid().optional().describe("Nur bei conflict wegen einer Dublette: der vorhandene Datensatz"),
+      umsatzgrenze: umsatzgrenzeSchema
+        .optional()
+        .describe("Nur bei umsatzgrenze: die Werte, die ein erneutes Festschreiben unverändert in bestaetigt mitschickt"),
     }),
   })
   .register(responseSchemas, { id: "Error" });
@@ -218,6 +232,12 @@ export const draftCreateSchema = z
 
 /** Änderung eines Entwurfs: nur die genannten Felder; lines ersetzt alle Positionen. Die Referenz bleibt. */
 export const draftPatchSchema = z.object(optional(draftApiFields)).strict().register(requestSchemas, { id: "InvoiceDraftPatch" });
+
+/** Body beim Festschreiben, darf fehlen; bestaetigt nur nach einer Antwort umsatzgrenze */
+export const finalizeSchema = z
+  .object({ bestaetigt: umsatzgrenzeSchema.optional().describe("Die Werte aus error.umsatzgrenze, unverändert") })
+  .strict()
+  .register(requestSchemas, { id: "InvoiceFinalize" });
 
 const lineSchema = z.object({
   position: z.number().int(),

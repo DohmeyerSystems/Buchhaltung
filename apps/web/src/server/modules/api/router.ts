@@ -40,10 +40,11 @@ function firstValues(params: URLSearchParams): Record<string, string> {
   return query;
 }
 
+const NOT_JSON = "Body bitte als JSON mit Content-Type: application/json.";
+
 async function readJson(request: Request): Promise<{ body: unknown } | { failure: ApiResult }> {
   const type = request.headers.get("content-type") ?? "";
-  if (!/^application\/([\w.+-]+\+)?json\b/i.test(type))
-    return { failure: fail("unsupported_media_type", "Body bitte als JSON mit Content-Type: application/json.") };
+  if (!/^application\/([\w.+-]+\+)?json\b/i.test(type)) return { failure: fail("unsupported_media_type", NOT_JSON) };
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return { failure: fail("payload_too_large", "Body ist größer als 1 MB.") };
   const text = await request.text();
   if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) return { failure: fail("payload_too_large", "Body ist größer als 1 MB.") };
@@ -108,8 +109,12 @@ async function readMultipart(request: Request, limit: number): Promise<{ body: u
   }
 }
 
-function readBody(route: ApiRoute, request: Request): Promise<{ body: unknown } | { failure: ApiResult }> {
-  if (!WITH_BODY.has(route.method)) return Promise.resolve({ body: undefined });
+async function readBody(route: ApiRoute, request: Request): Promise<{ body: unknown } | { failure: ApiResult }> {
+  if (!WITH_BODY.has(route.method)) return { body: undefined };
+  // Ein Aufruf ohne Body (curl -X POST ohne -d) schickt keinen Content-Type
+  if (route.optionalBody && !request.headers.has("content-type")) {
+    return (await request.text()).trim() === "" ? { body: undefined } : { failure: fail("unsupported_media_type", NOT_JSON) };
+  }
   return route.multipartLimit ? readMultipart(request, route.multipartLimit) : readJson(request);
 }
 

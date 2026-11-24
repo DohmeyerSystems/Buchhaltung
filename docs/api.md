@@ -12,12 +12,15 @@ description: >-
 
 Die Oberfläche einer solchen Automation kannst du als [eigene Seite](eigene-seiten.md) ins Menü von Haben hängen.
 
-Die API **bucht nichts, schreibt nichts fest und versendet nichts**. Ein Entwurf aus der API ist ein Entwurf wie jeder andere: Du prüfst ihn in Haben und schreibst ihn dort mit einem Klick fest. Das bleibt wegen GoBD so, denn erst mit dem Festschreiben bekommt die Rechnung ihre Nummer, ihr PDF und ihre Buchung. Genauso wird ein Beleg aus der API erst gebucht, wenn du ihn in Haben geprüft hast.
+Die API **bucht nichts von Hand und versendet nichts**. Ein Entwurf aus der API ist ein Entwurf wie jeder andere: Du prüfst ihn in Haben und schreibst ihn dort mit einem Klick fest. Erst mit dem Festschreiben bekommt die Rechnung ihre Nummer, ihr PDF und ihre Buchung. Genauso wird ein Beleg aus der API erst gebucht, wenn du ihn in Haben geprüft hast.
+
+> [!WARNING]
+> **Nur in diesem Fork (DohmeyerSystems):** Ein Token mit dem Recht `rechnungen:festschreiben` schreibt Rechnungen auch über die API fest, siehe [Festschreiben über die API](#festschreiben-über-die-api). Eine festgeschriebene Rechnung lässt sich danach nur noch in Haben stornieren. Wer das Recht vergibt, verantwortet, dass das Werkzeug nur richtige Rechnungen festschreibt, und nennt die automatische Rechnungsstellung in seiner Verfahrensdokumentation.
 
 | Bereich | Was die API kann |
 | --- | --- |
 | Kontakte | auflisten und suchen, lesen, anlegen, ändern (nicht löschen: Kontakte sind versioniert) |
-| Rechnungen | alle lesen, auch festgeschriebene; Entwürfe anlegen, ändern und löschen, solange sie Entwurf sind |
+| Rechnungen | alle lesen, auch festgeschriebene, mit PDF und XML; Entwürfe anlegen, ändern und löschen, solange sie Entwurf sind; im Fork [festschreiben](#festschreiben-über-die-api) |
 | Wiederkehrende Rechnungen | [Vorlagen anlegen](#wiederkehrende-rechnungen) |
 | Angebote | alle lesen, auch festgeschriebene, mit der Antwort des Kunden und der Rechnung daraus; [Entwürfe](#angebotsentwürfe) anlegen, ändern und löschen, solange sie Entwurf sind |
 | Belege | hochladen (landen als „Zu prüfen“), auflisten und lesen, ob sie schon geprüft und gebucht sind; nicht ändern oder löschen |
@@ -39,8 +42,9 @@ Es sind dieselben Tokens wie für die [KI-Assistenten](ki-assistenten.md); was e
 | --- | --- |
 | `kontakte:lesen` | `GET /kontakte`, `GET /kontakte/{id}` |
 | `kontakte:schreiben` | dazu `POST /kontakte`, `PATCH /kontakte/{id}` |
-| `rechnungen:lesen` | `GET /rechnungen`, `GET /rechnungen/{id}` |
+| `rechnungen:lesen` | `GET /rechnungen`, `GET /rechnungen/{id}`, `GET /rechnungen/{id}/pdf`, `GET /rechnungen/{id}/xml` |
 | `rechnungen:entwuerfe` | dazu `POST /rechnungen`, `PATCH /rechnungen/{id}`, `DELETE /rechnungen/{id}` |
+| `rechnungen:festschreiben` | dazu `POST /rechnungen/{id}/festschreiben` (nur im Fork) |
 | `rechnungen:vorlagen-anlegen` | `POST /rechnungen/wiederkehrend` |
 | `angebote:lesen` | `GET /angebote`, `GET /angebote/{id}` |
 | `angebote:entwuerfe` | dazu `POST /angebote`, `PATCH /angebote/{id}`, `DELETE /angebote/{id}` |
@@ -53,7 +57,7 @@ Es sind dieselben Tokens wie für die [KI-Assistenten](ki-assistenten.md); was e
 | `bank:importieren` | `GET /bankquellen`, `POST /bankimporte` |
 | `haben:lesen` | nur die Werkzeuge über [MCP](ki-assistenten.md), nicht die REST-API |
 
-„Dazu“ bedeutet, dass das Recht auch die Lesezugriffe der Zeile darüber erlaubt. Ein Token ohne das nötige Recht bekommt `403`.
+„Dazu“ bedeutet, dass das Recht auch die Zugriffe der Zeilen darüber erlaubt. Ein Token ohne das nötige Recht bekommt `403`.
 
 ## Grundlagen
 
@@ -86,6 +90,7 @@ Jeder Fehler hat dieselbe Form, mit einer deutschen Meldung und bei ungültigen 
 | 403 | `forbidden` | Dem Token fehlt das Recht; die Meldung nennt es |
 | 404 | `not_found` | Unbekannter Pfad oder Datensatz |
 | 405 | `method_not_allowed` | Methode gibt es hier nicht; `Allow` nennt die erlaubten |
+| 409 | `umsatzgrenze` | Nur beim Festschreiben: Die Rechnung könnte die Kleinunternehmergrenze überschreiten; `umsatzgrenze` nennt die Werte zum Bestätigen |
 | 409 | `conflict` | Die Rechnung oder das Angebot ist festgeschrieben, Gesamtrabatt oder Zahlungsplan eines Angebotsentwurfs passen nicht zu den neuen Positionen, oder ein Entwurf, den nur Haben selbst bearbeitet (Storno, Korrektur, Abschlag, Schlussrechnung, aus einem Angebot); bei Belegen: dieselbe Datei liegt mit einer anderen oder ohne Referenz schon vor, `existingId` nennt den Beleg |
 | 413, 415 | `payload_too_large`, `unsupported_media_type` | Body größer als 1 MB (Beleg: Datei größer als 20 MB) oder nicht als JSON (Beleg: nicht als `multipart/form-data`, oder die Datei ist kein PDF, Bild oder E-Rechnungs-XML) |
 | 422 | `unprocessable` | Fachlich abgelehnt, etwa ein unbekannter Kontakt |
@@ -219,7 +224,31 @@ Ist die Rechnung schon festgeschrieben, antworten Ändern und Löschen mit `409`
 1. Neue Bestellungen von der Plattform holen (Trigger oder Zeitplan).
 2. `GET /kontakte?q=<E-Mail>`; ist `total` 0, den Kontakt mit `POST /kontakte` anlegen.
 3. `POST /rechnungen` mit `contactId`, `externalSource`, `externalId` und den Positionen. Läuft der Abruf doppelt, kommt `200` mit der vorhandenen Rechnung statt eines Duplikats.
-4. In Haben die Entwürfe prüfen und festschreiben, dann wie gewohnt versenden.
+4. In Haben die Entwürfe prüfen und festschreiben, dann wie gewohnt versenden. Im Fork geht das auch über [die API](#festschreiben-über-die-api).
+
+## Festschreiben über die API
+
+Nur in diesem Fork. `POST /rechnungen/{id}/festschreiben` macht dasselbe wie **Festschreiben** in Haben: dieselben Prüfungen, dann Nummer, PDF und XML, Sperre und Buchung in einem Schritt. Danach überträgt Haben die Rechnung ins [Dokumentenarchiv](dokumentenarchiv.md), wenn eines eingerichtet ist. Versendet wird nichts. Das PDF holt das Werkzeug mit `GET /rechnungen/{id}/pdf`, die E-Rechnung mit `GET /rechnungen/{id}/xml`. Beides kommt unverändert so, wie es beim Festschreiben gespeichert wurde. Zu einem Entwurf gibt es keine Datei (`404`).
+
+```sh
+curl -s -X POST "$HABEN/rechnungen/<id>/festschreiben" -H "Authorization: Bearer $TOKEN"
+curl -s "$HABEN/rechnungen/<id>/pdf" -H "Authorization: Bearer $TOKEN" -o rechnung.pdf
+```
+
+| Status | Bedeutung |
+| --- | --- |
+| 200 | Festgeschrieben; die Antwort ist die Rechnung mit `number` |
+| 409 `conflict` | Schon festgeschrieben, auch wenn zwei Aufrufe gleichzeitig kamen; es entsteht nie eine zweite Nummer |
+| 409 `umsatzgrenze` | Kleinunternehmer: Die Rechnung könnte die Grenze nach § 19 UStG überschreiten. Nichts ist festgeschrieben |
+| 422 | Noch nicht bereit, etwa weil Firmendaten fehlen; die Meldung nennt die Gründe wie im Editor |
+
+Bei `umsatzgrenze` stehen in `error.umsatzgrenze` der bisherige Umsatz, das Netto der Rechnung, die Grenze und gegebenenfalls der Vorjahresumsatz. Prüfe sie wie die Rückfrage in Haben. Erst ein erneuter Aufruf mit genau diesen Werten schreibt fest:
+
+```sh
+curl -s -X POST "$HABEN/rechnungen/<id>/festschreiben" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json" -d '{"bestaetigt":{"umsatz":2400000,"rechnung":12000000,"grenze":2500000}}'
+```
+
+Hat sich der Umsatz inzwischen geändert, passen die Werte nicht mehr, und die Rückfrage kommt erneut.
 
 ## Wiederkehrende Rechnungen
 
@@ -432,7 +461,7 @@ Die Antwort (`201`):
 ## Sicherheit
 
 - Der Zugang ist standardmäßig aus. Tokens laufen nach 30, 90 oder 365 Tagen ab und lassen sich einzeln widerrufen. Gespeichert ist nur ihr SHA-256-Hash.
-- Jedes Token hat nur die Rechte, die du ihm gibst. Keines kann buchen, festschreiben, stornieren, versenden oder etwas an ELSTER schicken, und keines sieht Zertifikat, Passwörter, API-Schlüssel oder Steuer-ID. Ein Token mit `belege:anlegen` kann Belege nur hinzufügen, nicht ändern, löschen oder herunterladen. Ein Token mit `bank:importieren` liefert nur in Quellen, die du am Konto freigegeben hast, und liest keine Umsätze.
+- Jedes Token hat nur die Rechte, die du ihm gibst. Keines kann von Hand buchen, stornieren, versenden oder etwas an ELSTER schicken; festschreiben nur eines mit `rechnungen:festschreiben` (Fork), und keines sieht Zertifikat, Passwörter, API-Schlüssel oder Steuer-ID. Ein Token mit `belege:anlegen` kann Belege nur hinzufügen, nicht ändern, löschen oder herunterladen. Ein Token mit `bank:importieren` liefert nur in Quellen, die du am Konto freigegeben hast, und liest keine Umsätze.
 - Die API meldet sich nur mit dem Token an, nie mit dem Sitzungscookie. Eine fremde Webseite, die du im selben Browser öffnest, kann sie deshalb nicht in deinem Namen aufrufen.
 - Ein Token ist so viel wert wie seine Rechte. Halte es in den Zugangsdaten deines Werkzeugs, nicht im Klartext in Skripten oder Workflows, und erreichst du Haben aus dem Internet, dann nur über HTTPS.
 - Im SSO-Modus hat jedes Token einen verantwortlichen Inhaber; verliert er die Inhaberrolle, deaktiviert Haben seine Tokens, siehe [Tokens nach Gruppenentzug](installation-sso.md#tokens-nach-gruppenentzug).

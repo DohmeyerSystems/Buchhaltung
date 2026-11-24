@@ -6,6 +6,7 @@ import { BANK_IMPORT_DESCRIPTION, createBankImportHandler, listBankSourcesHandle
 import { createContactHandler, getContactHandler, listContactsHandler, updateContactHandler } from "./contacts.ts";
 import type { Handler } from "./http.ts";
 import { createDocumentHandler, getDocumentHandler, listDocumentsHandler } from "./documents.ts";
+import { finalizeInvoiceHandler, invoiceFileHandler } from "./invoice-finalize.ts";
 import { createInvoiceHandler, deleteInvoiceHandler, getInvoiceHandler, listInvoicesHandler, updateInvoiceHandler } from "./invoices.ts";
 import { createServiceEntryHandler, deleteServiceEntryHandler, getServiceEntryHandler, listServiceEntriesHandler } from "./leistungen.ts";
 import { serviceEntryQuerySchema } from "./leistungen-schemas.ts";
@@ -35,8 +36,10 @@ export interface ApiRoute {
   requestBody?: string;
   /** Body als multipart/form-data statt JSON, höchstens so viele Bytes */
   multipartLimit?: number;
-  /** Status → Name in responseSchemas (null: ohne Inhalt) und Beschreibung */
-  responses: Record<number, { schema: string | null; description: string }>;
+  /** requestBody darf fehlen; ohne Content-Type ist der Body dann leer */
+  optionalBody?: boolean;
+  /** Status → Name in responseSchemas (null: ohne Inhalt oder eine Datei vom Typ media) und Beschreibung */
+  responses: Record<number, { schema: string | null; description: string; media?: "application/pdf" | "application/xml" }>;
   /** Fehler, die nur dieser Endpunkt kennt: Status → Beschreibung */
   errors?: Record<number, string>;
   handler: Handler;
@@ -155,6 +158,46 @@ export const API_ROUTES: ApiRoute[] = [
     responses: { 204: { schema: null, description: "Gelöscht" } },
     errors: { 409: "Die Rechnung ist festgeschrieben" },
     handler: deleteInvoiceHandler,
+  },
+  {
+    method: "POST",
+    path: "/rechnungen/{id}/festschreiben",
+    scope: "rechnungen:festschreiben",
+    tag: "Rechnungen",
+    summary: "Rechnungsentwurf festschreiben",
+    description:
+      "Wie der Knopf in Haben: dieselben Prüfungen, dann Nummer, PDF und XML, Sperre und Buchung in einem Schritt. Danach " +
+      "nur noch Storno in Haben. Body leer oder {}. Würde die Rechnung die Kleinunternehmergrenze überschreiten, kommt 409 " +
+      "mit code umsatzgrenze und den Werten in error.umsatzgrenze; erst ein erneuter Aufruf mit diesen Werten in bestaetigt " +
+      "schreibt fest. Fork DohmeyerSystems, nicht in Haben selbst.",
+    requestBody: "InvoiceFinalize",
+    optionalBody: true,
+    responses: { 200: { schema: "Invoice", description: "Die festgeschriebene Rechnung mit Nummer" } },
+    errors: {
+      409: "Schon festgeschrieben (conflict), oder Rückfrage zur Kleinunternehmergrenze (umsatzgrenze)",
+      422: "Noch nicht bereit, z. B. Firmendaten unvollständig; die Meldung nennt die Gründe",
+    },
+    handler: finalizeInvoiceHandler,
+  },
+  {
+    method: "GET",
+    path: "/rechnungen/{id}/pdf",
+    scope: "rechnungen:lesen",
+    tag: "Rechnungen",
+    summary: "PDF einer festgeschriebenen Rechnung",
+    description: "Das beim Festschreiben gespeicherte PDF, unverändert, als Download. Zu einem Entwurf 404.",
+    responses: { 200: { schema: null, media: "application/pdf", description: "Das PDF" } },
+    handler: invoiceFileHandler("pdf"),
+  },
+  {
+    method: "GET",
+    path: "/rechnungen/{id}/xml",
+    scope: "rechnungen:lesen",
+    tag: "Rechnungen",
+    summary: "E-Rechnungs-XML einer festgeschriebenen Rechnung",
+    description: "Die beim Festschreiben gespeicherte XML (CII oder UBL), unverändert, als Download. Zu einem Entwurf oder ohne XML 404.",
+    responses: { 200: { schema: null, media: "application/xml", description: "Die XML" } },
+    handler: invoiceFileHandler("xml"),
   },
   {
     method: "GET",
