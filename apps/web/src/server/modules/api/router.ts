@@ -42,12 +42,14 @@ function firstValues(params: URLSearchParams): Record<string, string> {
 
 const NOT_JSON = "Body bitte als JSON mit Content-Type: application/json.";
 
-async function readJson(request: Request): Promise<{ body: unknown } | { failure: ApiResult }> {
+/** JSON-Body; mit `optional` ist ein leerer Body kein Fehler, auch mit Content-Type JSON */
+async function readJson(request: Request, optional = false): Promise<{ body: unknown } | { failure: ApiResult }> {
   const type = request.headers.get("content-type") ?? "";
   if (!/^application\/([\w.+-]+\+)?json\b/i.test(type)) return { failure: fail("unsupported_media_type", NOT_JSON) };
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return { failure: fail("payload_too_large", "Body ist größer als 1 MB.") };
   const text = await request.text();
   if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) return { failure: fail("payload_too_large", "Body ist größer als 1 MB.") };
+  if (optional && text.trim() === "") return { body: undefined };
   try {
     return { body: JSON.parse(text) as unknown };
   } catch {
@@ -115,7 +117,7 @@ async function readBody(route: ApiRoute, request: Request): Promise<{ body: unkn
   if (route.optionalBody && !request.headers.has("content-type")) {
     return (await request.text()).trim() === "" ? { body: undefined } : { failure: fail("unsupported_media_type", NOT_JSON) };
   }
-  return route.multipartLimit ? readMultipart(request, route.multipartLimit) : readJson(request);
+  return route.multipartLimit ? readMultipart(request, route.multipartLimit) : readJson(request, route.optionalBody);
 }
 
 async function runHandler(route: ApiRoute, request: ApiRequest): Promise<ApiResult> {
