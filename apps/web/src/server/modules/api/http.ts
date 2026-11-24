@@ -100,8 +100,7 @@ export function validate<T extends z.ZodType>(schema: T, value: unknown): { data
 }
 
 /** Dateiname für `filename*` nach RFC 8187 */
-const encodeFilename = (filename: string) =>
-  encodeURIComponent(filename).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+const encodeFilename = (filename: string) => encodeURIComponent(filename).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 
 function fileResponse(status: number, file: ApiFile): Response {
   return new Response(new Uint8Array(file.bytes), {

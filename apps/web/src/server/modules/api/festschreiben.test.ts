@@ -110,7 +110,8 @@ describe.skipIf(!testDatabaseUrl)("REST-API: Rechnungen festschreiben und abrufe
       const id = await entwurf(t);
       const results = await Promise.all([1, 2, 3].map(() => call(t, "POST", `/rechnungen/${id}/festschreiben`)));
       expect(results.map((r) => r.status).sort()).toEqual([200, 409, 409]);
-      expect(await sql`select number from invoice_number_counters`).toHaveLength(1);
+      // Der Zähler des Nummernkreises steht auf 1: Die Verlierer haben keine Nummer gezogen
+      expect(await sql`select last from invoice_number_counters`).toEqual([{ last: 1 }]);
     });
 
     it("nennt mit 422, was zum Festschreiben fehlt, und lässt den Entwurf stehen", async () => {
