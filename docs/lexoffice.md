@@ -167,6 +167,8 @@ Haben liest nur. Es legt in Lexware Office nichts an und ändert nichts. Nach de
 2. **Belegliste:** alle Ausgangsrechnungen, Gutschriften und Abschlagsrechnungen aus dem Rechnungsmodul sowie alle Einnahme- und Ausgabebelege samt Gutschriften aus der Buchhaltung, archiviert und nicht archiviert. Entwürfe bleiben draußen; Schritt 2 nennt ihre Zahl unter „Übergangen, kein Beleg“.
 3. **Belege und Dateien:** je Beleg die Details, der Zahlungsstatus mit den einzelnen Zahlungen, das Original-PDF, bei E-Rechnungen das XML und bei Buchhaltungsbelegen alle angehängten Dateien. Die Kategorien aus Lexware Office kommen mit ihrem Namen dazu.
 
+Der Fortschritt unter **Dateien** zählt sowohl beim API-Abruf als auch beim ZIP-Import die neu an Belegen gespeicherten Dateien. Dazu gehören auch Dateien, die Haben an bereits archivierte Belege anhängt.
+
 Die Antwort der API wird je Beleg vollständig gespeichert, zum Nachweis. Beträge rechnet Haben in Cent um; maßgeblich sind Brutto und Steuer des Belegs, Netto ergibt sich daraus. Bei Schlussrechnungen rechnet Haben die verrechneten Abschläge je Steuersatz heraus, die Beträge entsprechen also dem geforderten Restbetrag. Die Abschlagsrechnungen sind eigene Belege; so zählen ihre Umsätze und Steuern im Abgleich und bei den offenen Posten nicht doppelt. Das gilt für Belege, die mit dieser Version abgerufen werden; schon gespeicherte Belege bleiben unverändert.
 
 ### Kontakte verknüpfen
@@ -254,7 +256,8 @@ Die Zahlung muss in Haben ankommen: Ruft Haben die Bank erst ab einem späteren 
 | Betrag nicht positiv | Gutschriften werden nicht übernommen |
 | keine Datei aus Lexoffice | Erst die Datei in Lexware Office anhängen und erneut abrufen |
 | XML der E-Rechnung fehlt | Erneut abrufen; bei der Sicherung das Skript noch einmal laufen lassen und die neue Sicherung hochladen |
-| Datei erwartet, Abruf aus Lexoffice fehlgeschlagen | Ebenso |
+| Datei fehlt in der Sicherung | Eine neue Sicherung mit der fehlenden Datei importieren |
+| Datei erwartet, Abruf aus Lexware Office fehlgeschlagen | Im Umzug **Erneut abrufen** wählen |
 
 Warum eine Teilzahlung vor dem Stichtag sperrt: Die Rechnung in Haben trägt den Betrag des Original-PDFs, und offen ist in Haben, was keine Zahlung im Bankabgleich deckt. Für die Zahlung vor dem Stichtag gibt es in Haben keinen Bankumsatz. Sie als Ausbuchung zu erfassen, minderte die Umsatzsteuer wie eine Änderung der Bemessungsgrundlage (§ 17 Abs. 1 UStG), obwohl das Entgelt gezahlt ist. Eine Teilzahlung nach dem Stichtag sperrt nicht: Am Stichtag war der ganze Betrag offen, und die Zahlung kommt in Haben an.
 
