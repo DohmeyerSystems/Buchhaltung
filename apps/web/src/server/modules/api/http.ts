@@ -11,6 +11,14 @@ export interface ApiResult {
   status: number;
   body?: unknown;
   headers?: Record<string, string>;
+  /** Statt JSON eine gespeicherte Datei, etwa das PDF einer Rechnung; immer als Download */
+  file?: ApiFile;
+}
+
+export interface ApiFile {
+  bytes: Uint8Array;
+  mimeType: "application/pdf" | "application/xml";
+  filename: string;
 }
 
 export interface Issue {
@@ -51,13 +59,25 @@ const STATUS: Record<ErrorCode, number> = {
   payload_too_large: 413,
   validation_failed: 400,
   conflict: 409,
+  umsatzgrenze: 409,
   unprocessable: 422,
   rate_limited: 429,
   internal_error: 500,
 };
 
-export function fail(code: ErrorCode, message: string, extra: { issues?: Issue[]; existingId?: string; headers?: Record<string, string> } = {}): ApiResult {
-  const details = { ...(extra.issues ? { issues: extra.issues } : {}), ...(extra.existingId ? { existingId: extra.existingId } : {}) };
+interface FailExtra {
+  issues?: Issue[];
+  existingId?: string;
+  umsatzgrenze?: Record<string, number>;
+  headers?: Record<string, string>;
+}
+
+export function fail(code: ErrorCode, message: string, extra: FailExtra = {}): ApiResult {
+  const details = {
+    ...(extra.issues ? { issues: extra.issues } : {}),
+    ...(extra.existingId ? { existingId: extra.existingId } : {}),
+    ...(extra.umsatzgrenze ? { umsatzgrenze: extra.umsatzgrenze } : {}),
+  };
   return { status: STATUS[code], body: { error: { code, message, ...details } }, headers: extra.headers };
 }
 
@@ -79,7 +99,24 @@ export function validate<T extends z.ZodType>(schema: T, value: unknown): { data
   return parsed.success ? { data: parsed.data } : { failure: validationFailed(parsed.error) };
 }
 
+/** Dateiname für `filename*` nach RFC 8187 */
+const encodeFilename = (filename: string) => encodeURIComponent(filename).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+
+function fileResponse(status: number, file: ApiFile): Response {
+  return new Response(new Uint8Array(file.bytes), {
+    status,
+    headers: {
+      "Content-Type": file.mimeType === "application/xml" ? "application/xml; charset=utf-8" : file.mimeType,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeFilename(file.filename)}`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+    },
+  });
+}
+
 export function toResponse(result: ApiResult): Response {
+  if (result.file) return fileResponse(result.status, result.file);
   const headers = {
     "Cache-Control": "no-store",
     ...(result.body === undefined ? {} : { "Content-Type": "application/json; charset=utf-8" }),

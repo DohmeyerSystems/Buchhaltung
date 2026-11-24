@@ -20,7 +20,8 @@ const MAX_DOCUMENT_MB = MAX_DOCUMENT_SIZE / 1024 / 1024;
 const DESCRIPTION = [
   "Allgemeine Schnittstelle von Haben für eigene Werkzeuge und Automationen. Sie liest und schreibt Kontakte,",
   "Rechnungs- und Angebotsentwürfe und Katalogartikel. Eingangsbelege landen in Haben als „Zu prüfen“. Sie bucht",
-  "nichts, schreibt nichts fest und versendet nichts: Das bleibt wegen GoBD ein Klick in Haben.",
+  "nichts von Hand und versendet nichts. Rechnungen schreibt sie nur mit dem Recht rechnungen:festschreiben fest, mit",
+  "denselben Prüfungen wie der Knopf in Haben (Fork DohmeyerSystems).",
   "",
   "Anmeldung mit einem API-Token aus Einstellungen → KI-Assistenten und API als `Authorization: Bearer hb_…`. Jeder",
   "Endpunkt verlangt das in seiner Beschreibung genannte Recht (scope).",
@@ -85,7 +86,7 @@ function parameters(route: ApiRoute) {
 }
 
 function requestBody(route: ApiRoute, schema: string) {
-  if (!route.multipartLimit) return { required: true, content: { "application/json": { schema: { $ref: REF(schema) } } } };
+  if (!route.multipartLimit) return { required: !route.optionalBody, content: { "application/json": { schema: { $ref: REF(schema) } } } };
   // Welche Dateien Haben annimmt; erkannt wird am Inhalt, der angegebene Typ ist nur ein Hinweis
   const contentType = DOCUMENT_MEDIA_TYPES.join(", ");
   const encoding = { datei: { contentType }, file: { contentType } };
@@ -94,9 +95,13 @@ function requestBody(route: ApiRoute, schema: string) {
 
 function operation(route: ApiRoute) {
   const responses = Object.fromEntries(
-    Object.entries(route.responses).map(([status, { schema, description }]) => [
+    Object.entries(route.responses).map(([status, { schema, description, media }]) => [
       status,
-      schema ? { description, content: { "application/json": { schema: { $ref: REF(schema) } } } } : { description },
+      schema
+        ? { description, content: { "application/json": { schema: { $ref: REF(schema) } } } }
+        : media
+          ? { description, content: { [media]: { schema: { type: "string", contentMediaType: media } } } }
+          : { description },
     ]),
   );
   return {
@@ -121,7 +126,7 @@ function buildDocument() {
     servers: [{ url: "/api/v1" }],
     tags: [
       { name: "Kontakte", description: "Kunden; versioniert, nicht löschbar" },
-      { name: "Rechnungen", description: "Alle Rechnungen lesen, Entwürfe anlegen, ändern und löschen" },
+      { name: "Rechnungen", description: "Alle Rechnungen lesen, Entwürfe anlegen, ändern, löschen und festschreiben, PDF und XML abrufen" },
       { name: "Angebote", description: "Alle Angebote lesen, Entwürfe anlegen, ändern und löschen; festgeschrieben, versendet und abgerechnet wird in Haben" },
       { name: "Belege", description: "Eingangsbelege hochladen und ihren Stand lesen; geprüft und gebucht wird in Haben" },
       { name: "Artikel", description: "Katalogartikel lesen, anlegen und ändern" },
