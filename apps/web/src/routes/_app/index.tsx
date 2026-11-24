@@ -224,6 +224,7 @@ function OverviewPage() {
       action: "Ansehen",
       tone: days <= 7 ? "warn" : "info",
       to: "/finanzamt",
+      erledigen: { id: appeal.id },
     });
   }
   for (const afa of data.afaPending) {
