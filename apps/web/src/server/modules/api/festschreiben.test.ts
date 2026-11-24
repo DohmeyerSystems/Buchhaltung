@@ -142,6 +142,19 @@ describe.skipIf(!testDatabaseUrl)("REST-API: Rechnungen festschreiben und abrufe
       expect((await call(t, "PATCH", `/rechnungen/${id}`, { note: "Danke!" })).status).toBe(200);
     });
 
+    it("nimmt einen leeren Body auch mit Content-Type JSON, wie ihn viele HTTP-Bibliotheken schicken", async () => {
+      const t = await token(SCOPES);
+      const id = await entwurf(t);
+      const response = await api.handleApiRequest(
+        new Request(`http://localhost:3000/api/v1/rechnungen/${id}/festschreiben`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
+          body: "",
+        }),
+      );
+      expect(response.status).toBe(200);
+    });
+
     it("lehnt unbekannte Felder im Body ab", async () => {
       const t = await token(SCOPES);
       const id = await entwurf(t);

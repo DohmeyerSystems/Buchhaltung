@@ -228,7 +228,7 @@ Ist die Rechnung schon festgeschrieben, antworten Ändern und Löschen mit `409`
 
 ## Festschreiben über die API
 
-Nur in diesem Fork. `POST /rechnungen/{id}/festschreiben` macht dasselbe wie **Festschreiben** in Haben: dieselben Prüfungen, dann Nummer, PDF und XML, Sperre und Buchung in einem Schritt. Danach überträgt Haben die Rechnung ins [Dokumentenarchiv](dokumentenarchiv.md), wenn eines eingerichtet ist. Versendet wird nichts. Das PDF holt das Werkzeug mit `GET /rechnungen/{id}/pdf`, die E-Rechnung mit `GET /rechnungen/{id}/xml`. Beides kommt unverändert so, wie es beim Festschreiben gespeichert wurde. Zu einem Entwurf gibt es keine Datei (`404`).
+`POST /rechnungen/{id}/festschreiben` macht dasselbe wie **Festschreiben** in Haben: dieselben Prüfungen, dann Nummer, PDF und XML, Sperre und Buchung in einem Schritt. Danach überträgt Haben die Rechnung ins [Dokumentenarchiv](dokumentenarchiv.md), wenn eines eingerichtet ist. Versendet wird nichts. Das PDF holt das Werkzeug mit `GET /rechnungen/{id}/pdf`, die E-Rechnung mit `GET /rechnungen/{id}/xml`. Beides kommt unverändert so, wie es beim Festschreiben gespeichert wurde. Zu einem Entwurf oder ohne gespeicherte XML kommt `404`.
 
 ```sh
 curl -s -X POST "$HABEN/rechnungen/<id>/festschreiben" -H "Authorization: Bearer $TOKEN"
@@ -245,10 +245,11 @@ curl -s "$HABEN/rechnungen/<id>/pdf" -H "Authorization: Bearer $TOKEN" -o rechnu
 Bei `umsatzgrenze` stehen in `error.umsatzgrenze` der bisherige Umsatz, das Netto der Rechnung, die Grenze und gegebenenfalls der Vorjahresumsatz. Prüfe sie wie die Rückfrage in Haben. Erst ein erneuter Aufruf mit genau diesen Werten schreibt fest:
 
 ```sh
-curl -s -X POST "$HABEN/rechnungen/<id>/festschreiben" -H "Authorization: Bearer $TOKEN"   -H "Content-Type: application/json" -d '{"bestaetigt":{"umsatz":2400000,"rechnung":12000000,"grenze":2500000}}'
+curl -s -X POST "$HABEN/rechnungen/<id>/festschreiben" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"bestaetigt":{"umsatz":2400000,"rechnung":120000,"grenze":2500000}}'
 ```
 
-Hat sich der Umsatz inzwischen geändert, passen die Werte nicht mehr, und die Rückfrage kommt erneut.
+Die Grenze ist im Gründungsjahr 25.000 €, sonst 100.000 €. Hat sich der Umsatz inzwischen geändert, passen die Werte nicht mehr, und die Rückfrage kommt erneut.
 
 ## Wiederkehrende Rechnungen
 
