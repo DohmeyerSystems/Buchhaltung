@@ -99,7 +99,7 @@ describe.skipIf(!testDatabaseUrl)("REST-API: Beleg aus Kundenguthaben (Postgres)
     const pdf = await call(t, "GET", `/rechnungen/${id}/pdf`);
     expect(pdf.status).toBe(200);
     expect(pdf.text.startsWith("%PDF-")).toBe(true);
-    expect((await call(t, "GET", `/rechnungen/${id}/xml`)).text).toContain("aus dem Kundenguthaben bezahlt");
+    expect((await call(t, "GET", `/rechnungen/${id}/xml`)).text).toMatch(/TypeCode>97<|PaymentMeansCode>97</);
     // Dieselbe externe Kennung liefert denselben Beleg
     const again = await call(t, "POST", "/rechnungen", {
       contactId: response.json!.contactId,

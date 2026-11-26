@@ -39,7 +39,7 @@ describe("Beleg aus Kundenguthaben (0 €)", () => {
     const { xml } = await buildEInvoice(doc);
     // 97 nach UNTDID 4461: Verrechnung zwischen den Partnern
     expect(xml).toMatch(format === "xrechnung-ubl" ? /<cbc:PaymentMeansCode>97<\/cbc:PaymentMeansCode>/ : /<ram:TypeCode>97<\/ram:TypeCode>/);
-    expect(xml).not.toMatch(/DueDate|FinancialAccount|PayeeFinancialAccount/);
-    expect(xml).toContain("aus dem Kundenguthaben bezahlt");
+    // Wie jede bereits bezahlte Rechnung ohne Frist, Zahlungsbedingungen und Konto (BR-CO-25 gilt erst ab Zahlbetrag > 0)
+    expect(xml).not.toMatch(/DueDate|PaymentTerms|FinancialAccount/);
   });
 });
