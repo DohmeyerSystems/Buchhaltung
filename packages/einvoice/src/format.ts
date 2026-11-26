@@ -33,8 +33,15 @@ export function servicePeriod(doc: InvoiceDocument): { from: string; to: string 
 
 type PaymentFields = Pick<InvoiceDocument, "kind" | "totals" | "issueDate" | "dueDate" | "skonto" | "directDebit" | "paidPayment">;
 
+/**
+ * Beleg aus Kundenguthaben (Fork DohmeyerSystems, SpectraHost): bereits bezahlt über „Kundenguthaben“. Mit Summe 0 heben
+ * sich Leistung und Abzug des Guthabens auf; das Geld kam schon mit der Aufladung.
+ */
+export const isCustomerCredit = (paidVia: string | null | undefined): boolean => paidVia?.trim().toLowerCase() === "kundenguthaben";
+
 export function paidInvoicePayment(doc: Pick<InvoiceDocument, "kind" | "totals" | "paidPayment">): InvoiceDocument["paidPayment"] {
-  return doc.kind === "rechnung" && doc.totals.gross > 0 ? doc.paidPayment : undefined;
+  if (doc.kind !== "rechnung") return undefined;
+  return doc.totals.gross > 0 || (doc.totals.gross === 0 && isCustomerCredit(doc.paidPayment?.paidVia)) ? doc.paidPayment : undefined;
 }
 
 /** Lastschrift nur auf einer Rechnung mit Zahlbetrag; Storno und Erstattung laufen nicht über das Mandat */
@@ -54,8 +61,9 @@ export function paymentSentence(doc: PaymentFields, t: Texts = TEXTS.de): string
   // Eine Rechnungskorrektur belegt eine Minderung, noch keine Auszahlung (Verrechnung: #274).
   if (doc.totals.gross < 0 && doc.kind === "korrektur") return t.correction;
   if (doc.totals.gross < 0) return t.noPayment;
-  if (doc.totals.gross === 0) return t.noPayment;
   const paid = paidInvoicePayment(doc);
+  if (paid && doc.totals.gross === 0) return t.paidFromCredit(t.date(paid.paidOn));
+  if (doc.totals.gross === 0) return t.noPayment;
   if (paid) return t.paidOn(t.date(paid.paidOn), paid.paidVia);
   if (collectedByDirectDebit(doc)) {
     const d = doc.directDebit;

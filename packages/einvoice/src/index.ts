@@ -44,6 +44,7 @@ export { buildHinterlegungPdf, hinterlegungPdfData } from "./hinterlegung.ts";
 export { buildUstidBestaetigungPdf, ustidBestaetigungPdfData, type UstidBestaetigungDocument } from "./ustid-bestaetigung.ts";
 export { buildEInvoice } from "./xml.ts";
 export { validateForFormat } from "./validate.ts";
+export { isCustomerCredit } from "./format.ts";
 export { extractFacturXXml } from "./zugferd.ts";
 export { extractEmbeddedXml } from "./embedded.ts";
 export {
