@@ -99,9 +99,11 @@ Jeder Fehler hat dieselbe Form, mit einer deutschen Meldung und bei ungültigen 
 
 ## Bereits bezahlte Rechnungen
 
-Für `POST /rechnungen` und `PATCH /rechnungen/{id}` setzt du `paymentMethod` auf `bereits_bezahlt` und gibst `paidVia` (Zahlungsdienstleister oder `bar`) und `paidOn` (Datum als `JJJJ-MM-TT`) an. Das Zahlungsdatum darf vor dem Rechnungsdatum liegen. Bei `PATCH` bleiben ausgelassene Zahlungsangaben erhalten. Mit `paymentMethod: "ueberweisung"` entfernst du den Vermerk. Ohne Angabe gilt bei neuen Entwürfen Überweisung.
+Für `POST /rechnungen` und `PATCH /rechnungen/{id}` setzt du `paymentMethod` auf `bereits_bezahlt` und gibst `paidVia` (Zahlungsdienstleister, `bar` oder `Kundenguthaben`) und `paidOn` (Datum als `JJJJ-MM-TT`) an. Das Zahlungsdatum darf vor dem Rechnungsdatum liegen. Bei `PATCH` bleiben ausgelassene Zahlungsangaben erhalten. Mit `paymentMethod: "ueberweisung"` entfernst du den Vermerk. Ohne Angabe gilt bei neuen Entwürfen Überweisung.
 
 Die Antwort enthält die drei Felder. `paid`, `open` und `listStatus` folgen weiter der tatsächlichen Zahlungszuordnung. Siehe [Bereits bezahlt](rechnungen-zahlung.md#bereits-bezahlt).
+
+Für einen [Beleg aus Kundenguthaben](rechnungen-zahlung.md#aus-kundenguthaben-bezahlt) über 0 € gibst du die Leistung und eine Position „Bezahlt aus Kundenguthaben“ mit negativem `unitPrice` und demselben Steuersatz an, dazu `paymentMethod: "bereits_bezahlt"`, `paidVia: "Kundenguthaben"` und `paidOn`. Ohne `paidVia: "Kundenguthaben"` oder bei negativer Summe kommt beim Festschreiben weiter `422` „Gesamtbetrag muss positiv sein“; fehlt die Leistung oder die Abzugszeile oder heben sie sich nicht je Steuersatz auf, nennt die Meldung das.
 
 ## Bestell-, Auftrags- und Lieferscheinnummer
 
@@ -250,8 +252,6 @@ curl -s -X POST "$HABEN/rechnungen/<id>/festschreiben" -H "Authorization: Bearer
 ```
 
 Die Grenze ist im Gründungsjahr 25.000 €, sonst 100.000 €. Hat sich der Umsatz inzwischen geändert, passen die Werte nicht mehr, und die Rückfrage kommt erneut.
-
-Eine Leistung, die der Kunde aus einem vorher aufgeladenen Guthaben bezahlt, wird ein Beleg über 0 €: die Leistung und eine Position „Bezahlt aus Kundenguthaben“ mit negativem `unitPrice`, dazu `paymentMethod: "bereits_bezahlt"`, `paidVia: "Kundenguthaben"` und `paidOn`. Er wird festgeschrieben, bucht aber nichts und fragt nie nach der Umsatzgrenze. Ohne diese Angaben bleibt es bei `422` „Gesamtbetrag muss positiv sein“. Siehe [Aus Kundenguthaben bezahlt](rechnungen-zahlung.md#aus-kundenguthaben-bezahlt).
 
 ## Wiederkehrende Rechnungen
 
