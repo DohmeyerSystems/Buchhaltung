@@ -145,6 +145,30 @@ describe.skipIf(!testDatabaseUrl)("REST-API: Beleg aus Kundenguthaben (Postgres)
     expect(await rechnungen.finalizeIssues(draft.id)).toContainEqual(expect.stringMatching(/Kundenguthaben.*Leistung und eine Abzugszeile/));
   });
 
+  it("lehnt Leistung und Abzug mit verschiedenen Steuersätzen ab, sonst entstünden Erlös und Umsatzsteuer", async () => {
+    await sql`update company set kleinunternehmer = false, ust_id = 'DE123456789' where id = 1`;
+    const t = await token();
+    const contact = await kontakt(t);
+    const created = await call(t, "POST", "/rechnungen", {
+      contactId: contact.id,
+      issueDate: today,
+      taxTreatment: "regulaer",
+      priceMode: "brutto",
+      paymentMethod: "bereits_bezahlt",
+      paidVia: "Kundenguthaben",
+      paidOn: today,
+      lines: [
+        { ...leistung, unitPrice: 1_190, taxRate: 1900 },
+        { ...abzug(-1_190), taxRate: 700 },
+      ],
+    });
+    expect(created.json!.gross).toBe(0);
+    const response = await call(t, "POST", `/rechnungen/${created.json!.id}/festschreiben`);
+    expect(response.status).toBe(422);
+    expect(response.json!.error!.message).toMatch(/je Steuersatz aufheben/);
+    expect(await journal()).toBe(0);
+  });
+
   it("fragt nie nach der Kleinunternehmergrenze, auch wenn sie schon überschritten wäre", async () => {
     const t = await token();
     const ueberGrenze = async () => ({ aktuell: { netto: 2_600_000 }, vorjahr: { netto: 0 }, jahresgrenze: 2_500_000, vorjahresgrenzeUeberschritten: false });
