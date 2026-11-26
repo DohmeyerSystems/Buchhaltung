@@ -251,6 +251,8 @@ curl -s -X POST "$HABEN/rechnungen/<id>/festschreiben" -H "Authorization: Bearer
 
 Die Grenze ist im Gründungsjahr 25.000 €, sonst 100.000 €. Hat sich der Umsatz inzwischen geändert, passen die Werte nicht mehr, und die Rückfrage kommt erneut.
 
+Eine Leistung, die der Kunde aus einem vorher aufgeladenen Guthaben bezahlt, wird ein Beleg über 0 €: die Leistung und eine Position „Bezahlt aus Kundenguthaben“ mit negativem `unitPrice`, dazu `paymentMethod: "bereits_bezahlt"`, `paidVia: "Kundenguthaben"` und `paidOn`. Er wird festgeschrieben, bucht aber nichts und fragt nie nach der Umsatzgrenze. Ohne diese Angaben bleibt es bei `422` „Gesamtbetrag muss positiv sein“. Siehe [Aus Kundenguthaben bezahlt](rechnungen-zahlung.md#aus-kundenguthaben-bezahlt).
+
 ## Wiederkehrende Rechnungen
 
 `POST /rechnungen/wiederkehrend` legt eine [Vorlage](rechnungen.md#wiederkehrende-rechnungen) für einen vorhandenen Kunden an. Beispiel für einen monatlichen Termin:

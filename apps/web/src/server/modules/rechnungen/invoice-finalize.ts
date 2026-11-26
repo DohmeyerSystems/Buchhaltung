@@ -1,5 +1,5 @@
 import { formatRateMonth, lineAmount, outgoingTaxIssues, rateMonth } from "@haben/core";
-import { buildEInvoice, validateForFormat, type Buyer } from "@haben/einvoice";
+import { buildEInvoice, isCustomerCredit, validateForFormat, type Buyer } from "@haben/einvoice";
 import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import type { UmsatzgrenzeBestaetigung } from "../../../lib/kleinunternehmer.ts";
@@ -76,6 +76,8 @@ export async function finalizeIssues(id: string, q: Db | Tx = db): Promise<strin
         .problems,
     );
     if (invoice.gross < 0) issues.push("Die Abschläge übersteigen die Gesamtleistung");
+  } else if (invoice.kind === "rechnung" && invoice.gross === 0 && paidFromCredit(invoice)) {
+    issues.push(...creditLineIssues(lines));
   } else if (invoice.kind === "rechnung" && invoice.gross <= 0) issues.push("Gesamtbetrag muss positiv sein");
   if (invoice.kind === "korrektur" && invoice.gross >= 0) issues.push("Eine Rechnungskorrektur muss den Betrag mindern");
   if (invoice.quoteId) issues.push(...(await quoteIssues(invoice, invoice.quoteId, lines, q)));
@@ -100,6 +102,21 @@ export async function finalizeIssues(id: string, q: Db | Tx = db): Promise<strin
     issues.push(...validateForFormat(preview));
   }
   return issues;
+}
+
+/**
+ * Beleg aus Kundenguthaben (Fork DohmeyerSystems, SpectraHost): bereits bezahlt über „Kundenguthaben“, Summe 0. Die
+ * Aufladung war schon Umsatz; Leistung und Abzug heben sich auf, deshalb bucht das Festschreiben nichts
+ * (`invoicePosting` lässt Zeilen ohne Betrag weg) und die Kleinunternehmergrenze fragt nicht (`pruefeUmsatzgrenze`).
+ */
+const paidFromCredit = (invoice: Invoice) => invoice.paymentMethod === "bereits_bezahlt" && isCustomerCredit(invoice.paidVia);
+
+/** Eine Summe 0 nur aus Leistung und Abzug, nicht etwa durch 100 % Rabatt */
+function creditLineIssues(lines: InvoiceLine[]): string[] {
+  const amounts = lines.map((line) => lineAmount(line.quantity, line.unitPrice));
+  return amounts.some((amount) => amount > 0) && amounts.some((amount) => amount < 0)
+    ? []
+    : ["Ein Beleg aus Kundenguthaben braucht eine Leistung und eine Abzugszeile mit Betrag"];
 }
 
 /** Was gegen das gewählte Angebot spricht: Stand, Kunde, Entscheidung, schon abgerechnet, offene Abschläge */

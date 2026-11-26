@@ -1,5 +1,15 @@
 import { formatEuro, formatPercent, skontoPaymentTerms } from "@haben/core";
-import { accountHolder, collectedByDirectDebit, compactIban, formatDate, invoiceSkonto, paidInvoicePayment, paymentSentence, servicePeriod } from "./format.ts";
+import {
+  accountHolder,
+  collectedByDirectDebit,
+  compactIban,
+  formatDate,
+  invoiceSkonto,
+  isCustomerCredit,
+  paidInvoicePayment,
+  paymentSentence,
+  servicePeriod,
+} from "./format.ts";
 import type { Invoice } from "./modell.ts";
 import type { InvoiceDocument } from "./types.ts";
 
@@ -55,9 +65,10 @@ export function setPayment(invoice: Invoice, doc: InvoiceDocument, credit: boole
   const { seller } = doc;
   const paid = paidInvoicePayment(doc);
   if (paid) {
-    // BT-81 nach UNTDID 4461: 10 = bar, 68 = Online-Zahlungsdienst. Bei BT-115 = 0 entfällt die Frist (BR-CO-25).
-    // https://docs.peppol.eu/poacc/billing/3.0/codelist/UNCL4461/
-    invoice["cac:PaymentMeans"] = [{ "cbc:PaymentMeansCode": paid.paidVia.toLowerCase() === "bar" ? "10" : "68" }];
+    // BT-81 nach UNTDID 4461: 10 = bar, 68 = Online-Zahlungsdienst, 97 = Verrechnung (Kundenguthaben). Bei BT-115 = 0
+    // entfällt die Frist (BR-CO-25). https://docs.peppol.eu/poacc/billing/3.0/codelist/UNCL4461/
+    const code = isCustomerCredit(paid.paidVia) ? "97" : paid.paidVia.toLowerCase() === "bar" ? "10" : "68";
+    invoice["cac:PaymentMeans"] = [{ "cbc:PaymentMeansCode": code }];
   } else if (!credit) {
     invoice["cbc:DueDate"] = doc.dueDate;
     if (collectedByDirectDebit(doc)) {

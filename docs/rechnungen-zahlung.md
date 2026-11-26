@@ -40,7 +40,13 @@ Der Code steht nur auf Rechnungen in Euro mit Zahlbetrag und nur, wenn in den Fi
 
 Wähle im Rechnungseditor unter **Zahlungsart** **Bereits bezahlt**. Trag unter **Bezahlt über** den Namen des Zahlungsdienstleisters (etwa eBay oder PayPal) oder `bar` ein und unter **Bezahlt am** das Zahlungsdatum. Es darf vor dem Rechnungsdatum liegen.
 
-Das PDF nennt die erfolgte Zahlung und enthält weder Zahlungsfrist noch Bankverbindung oder GiroCode. In ZUGFeRD und XRechnung steht der Rechnungsbetrag als bereits gezahlt (BT-113), der Zahlbetrag (BT-115) ist null; Fälligkeit und Zahlungsbedingungen entfallen damit (BR-CO-25). Die Zahlungsart (BT-81) ist 10 bei `bar`, sonst 68 (Online-Zahlungsdienst, [UNTDID 4461](https://service.unece.org/trade/untdid/d16b/tred/tred4461.htm)). Der Vermerk bucht keinen Zahlungseingang. Die Rechnung bleibt offen, bis du die Zahlung im [Bankabgleich](bank.md) oder [Kassenbuch](kasse.md) zuordnest.
+Das PDF nennt die erfolgte Zahlung und enthält weder Zahlungsfrist noch Bankverbindung oder GiroCode. In ZUGFeRD und XRechnung steht der Rechnungsbetrag als bereits gezahlt (BT-113), der Zahlbetrag (BT-115) ist null; Fälligkeit und Zahlungsbedingungen entfallen damit (BR-CO-25). Die Zahlungsart (BT-81) ist 10 bei `bar`, 97 bei `Kundenguthaben` (siehe unten), sonst 68 (Online-Zahlungsdienst, [UNTDID 4461](https://service.unece.org/trade/untdid/d16b/tred/tred4461.htm)). Der Vermerk bucht keinen Zahlungseingang. Die Rechnung bleibt offen, bis du die Zahlung im [Bankabgleich](bank.md) oder [Kassenbuch](kasse.md) zuordnest.
+
+### Aus Kundenguthaben bezahlt
+
+Nur im Fork DohmeyerSystems: Bezahlt ein Kunde eine Leistung aus einem Guthaben, das er vorher aufgeladen hat, war die Aufladung schon Umsatz. Der Beleg für die Leistung listet sie auf und zieht sie in einer Position mit negativem Preis wieder ab, etwa „Bezahlt aus Kundenguthaben“. Mit **Bezahlt über** `Kundenguthaben` lässt er sich mit der Summe 0,00 € festschreiben. Dafür braucht er mindestens eine Position mit positivem und eine mit negativem Betrag; eine Summe 0 nur durch Rabatt reicht nicht.
+
+Er bekommt eine Nummer wie jede Rechnung, bucht aber nichts: Leistung und Abzug heben sich auf. Er zählt deshalb weder in der EÜR noch zum Umsatz für die Kleinunternehmergrenze, nach der Haben dabei auch nicht fragt, und steht nicht offen. Ein Storno bucht ebenso nichts. Das PDF sagt „Der Betrag wurde am … aus dem Kundenguthaben bezahlt.“, die Zahlungsart in der E-Rechnung ist 97 (Verrechnung). Ob die Aufladung oder erst die Einlösung Umsatz ist (Mehrzweck-Gutschein, § 3 Abs. 15 UStG), klärst du mit deiner Steuerberatung.
 
 ## Lastschrift
 
