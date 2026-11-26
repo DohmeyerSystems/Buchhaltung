@@ -135,6 +135,11 @@ describe.skipIf(!testDatabaseUrl)("REST-API: Beleg aus Kundenguthaben (Postgres)
       rechnungen.draftSchema.parse({
         contactId: contact.id,
         issueDate: today,
+        serviceFrom: null,
+        serviceTo: null,
+        paymentTermDays: 14,
+        format: "zugferd",
+        note: "",
         taxTreatment: "kleinunternehmer",
         paymentMethod: "bereits_bezahlt",
         paidVia: "Kundenguthaben",
