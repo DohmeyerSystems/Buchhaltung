@@ -1,3 +1,4 @@
+import type { InvoiceLineInput } from "@haben/core";
 import { describe, expect, it } from "vitest";
 import { pdfData } from "./pdf.ts";
 import { sampleDocument } from "./samples.ts";
@@ -8,7 +9,7 @@ import { buildEInvoice } from "./xml.ts";
  * Beleg über 0 €, bezahlt aus dem Kundenguthaben (Fork DohmeyerSystems, SpectraHost): Leistung und Abzug heben sich auf.
  * Statt „keine Zahlung erforderlich“ nennt er die Zahlung aus dem Guthaben, ohne Bankverbindung, Frist und GiroCode.
  */
-const lines = [
+const lines: InvoiceLineInput[] = [
   { description: "KVM VPS M (1 Monat)", quantity: 1000, unit: "Stk.", unitPrice: 999, taxRate: 0 },
   { description: "Bezahlt aus Kundenguthaben", quantity: 1000, unit: "Psch.", unitPrice: -999, taxRate: 0 },
 ];
